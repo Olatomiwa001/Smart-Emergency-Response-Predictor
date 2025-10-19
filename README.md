@@ -446,7 +446,7 @@ SOFTWARE.
 ## 📧 Contact & Support
 
 - **Issues**: Open an issue on GitHub
-- **Email**: support@emergencypredictor.com
+- **Email**: princeola2004@gmail.com
 - **Documentation**: [Wiki](https://github.com/Olatomiwa001/Smart-Emergency-Response-Predictor/wiki)
 
 ## 🙏 Acknowledgments
@@ -477,5 +477,6 @@ SOFTWARE.
 **Last Updated**: October 2025
 
 ---
+
 
 Made with ❤️ for emergency responders and communities worldwide
