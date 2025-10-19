@@ -158,34 +158,105 @@ def show_risk_prediction(weather_api):
     """Display risk prediction interface"""
     st.header("📍 Emergency Risk Prediction")
     
+    # Import global cities database and geocoding
+    try:
+        from data.global_cities import GlobalCitiesDatabase
+        from api.geocoding_api import GeocodingAPI
+        cities_db = GlobalCitiesDatabase()
+        geocoding_api = GeocodingAPI()
+    except ImportError as e:
+        st.error(f"Error loading global cities database: {e}")
+        cities_db = None
+        geocoding_api = None
+    
     col1, col2 = st.columns(2)
     
     with col1:
         st.subheader("Location Input")
         
         # Input method selection
-        input_method = st.radio("Choose input method:", ["Coordinates", "City Name"])
+        input_method = st.radio("Choose input method:", ["City Name", "Coordinates"])
         
-        if input_method == "Coordinates":
-            lat = st.number_input("Latitude", value=40.7128, format="%.4f")
-            lon = st.number_input("Longitude", value=-74.0060, format="%.4f")
-        else:
-            city = st.text_input("City Name", value="New York")
-            # Simple coordinate mapping (in production, use geocoding API)
-            city_coords = {
-                "New York": (40.7128, -74.0060),
-                "Los Angeles": (34.0522, -118.2437),
-                "Chicago": (41.8781, -87.6298),
-                "Houston": (29.7604, -95.3698),
-                "Phoenix": (33.4484, -112.0740)
-            }
-            if city in city_coords:
-                lat, lon = city_coords[city]
+        if input_method == "City Name":
+            # Get list of countries
+            if cities_db:
+                countries = ["Any"] + cities_db.get_all_countries()
+                selected_country = st.selectbox("Filter by Country (Optional)", countries)
+                
+                # City input with suggestions
+                city_input = st.text_input(
+                    "Enter City Name", 
+                    value="Lagos",
+                    help="Type city name (e.g., Lagos, Ibadan, Nairobi, Mumbai)"
+                )
+                
+                # Show autocomplete suggestions
+                if city_input and len(city_input) >= 2 and cities_db:
+                    suggestions = cities_db.get_autocomplete_options(city_input, limit=5)
+                    if suggestions:
+                        st.info(f"💡 Suggestions: {', '.join([s['label'] for s in suggestions])}")
+                
+                # Try to find city in database first
+                lat, lon = None, None
+                location_source = None
+                
+                if cities_db:
+                    country_filter = None if selected_country == "Any" else selected_country
+                    city_data = cities_db.search_city(city_input, country_filter)
+                    
+                    if city_data:
+                        lat, lon = city_data['lat'], city_data['lon']
+                        location_source = "database"
+                        st.success(f"✓ Found in database: {city_data['city']}, {city_data['country']}")
+                
+                # If not in database, try geocoding API
+                if lat is None and geocoding_api:
+                    with st.spinner(f"🌍 Searching for '{city_input}' globally..."):
+                        geocode_query = city_input
+                        if selected_country != "Any":
+                            geocode_query = f"{city_input}, {selected_country}"
+                        
+                        geocode_result = geocoding_api.geocode(geocode_query)
+                        
+                        if geocode_result:
+                            lat, lon = geocode_result['latitude'], geocode_result['longitude']
+                            location_source = "geocoding"
+                            st.success(f"✓ Found via geocoding: {geocode_result['formatted_address']}")
+                            st.info(f"📍 Provider: {geocode_result.get('provider', 'unknown')}")
+                            
+                            # Show notice for new locations
+                            st.warning("⚠️ This location is new to our database. Predictions may be less accurate due to limited historical data.")
+                        else:
+                            st.error(f"❌ Could not find location: {city_input}")
+                            st.info("💡 Try using coordinates instead, or check spelling.")
+                            lat, lon = 6.5244, 3.3792  # Default to Lagos
+                            location_source = "default"
+                
+                if lat is None:
+                    # Ultimate fallback
+                    st.warning("Using default location: Lagos, Nigeria")
+                    lat, lon = 6.5244, 3.3792
+                    location_source = "default"
             else:
-                st.warning("City not found in database. Using default coordinates.")
-                lat, lon = 40.7128, -74.0060
+                city = st.text_input("City Name", value="Lagos")
+                st.warning("Global cities database not loaded. Using geocoding only.")
+                
+                if geocoding_api:
+                    geocode_result = geocoding_api.geocode(city)
+                    if geocode_result:
+                        lat, lon = geocode_result['latitude'], geocode_result['longitude']
+                        st.success(f"✓ {geocode_result['formatted_address']}")
+                    else:
+                        lat, lon = 6.5244, 3.3792
+                else:
+                    lat, lon = 6.5244, 3.3792
+        else:
+            # Manual coordinates input
+            lat = st.number_input("Latitude", value=6.5244, format="%.4f", help="Enter latitude (-90 to 90)")
+            lon = st.number_input("Longitude", value=3.3792, format="%.4f", help="Enter longitude (-180 to 180)")
+            location_source = "manual"
         
-        st.write(f"Selected Location: ({lat:.4f}, {lon:.4f})")
+        st.write(f"📍 Selected Location: ({lat:.4f}, {lon:.4f})")
         
         # Get weather data
         if st.button("Get Current Weather & Risk"):
